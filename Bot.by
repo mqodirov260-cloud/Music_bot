@@ -1,0 +1,102 @@
+import json
+import urllib.parse
+import urllib.request
+import time
+
+TOKEN = "BU_YERGA_YANGI_TOKENINGIZNI_YOZING"
+
+API = f"https://api.telegram.org/bot{TOKEN}/"
+
+def telegram(method, data=None):
+    url = API + method
+    data = urllib.parse.urlencode(data or {}).encode()
+    with urllib.request.urlopen(url, data=data, timeout=30) as response:
+        return json.loads(response.read().decode())
+
+def search_music(query):
+    params = urllib.parse.urlencode({
+        "term": query,
+        "media": "music",
+        "entity": "song",
+        "limit": 5
+    })
+
+    url = "https://itunes.apple.com/search?" + params
+
+    with urllib.request.urlopen(url, timeout=30) as response:
+        data = json.loads(response.read().decode())
+
+    return data.get("results", [])
+
+def send_message(chat_id, text):
+    telegram("sendMessage", {
+        "chat_id": chat_id,
+        "text": text,
+        "disable_web_page_preview": "false"
+    })
+
+def main():
+    offset = 0
+
+    send_message_text = {}
+
+    while True:
+        try:
+            updates = telegram("getUpdates", {
+                "offset": offset,
+                "timeout": 30
+            })
+
+            for update in updates.get("result", []):
+                offset = update["update_id"] + 1
+
+                message = update.get("message")
+                if not message:
+                    continue
+
+                chat_id = message["chat"]["id"]
+                text = message.get("text", "").strip()
+
+                if not text:
+                    continue
+
+                if text == "/start":
+                    send_message(
+                        chat_id,
+                        "🎵 Salom!\n\n"
+                        "Qo‘shiq nomi yoki ijrochi nomini yozing.\n"
+                        "Masalan:\n"
+                        "Shahzoda - Hayot\n\n"
+                        "Men sizga topilgan qo‘shiqlarni chiqarib beraman."
+                    )
+                    continue
+
+                send_message(chat_id, "🔎 Qidiryapman...")
+
+                results = search_music(text)
+
+                if not results:
+                    send_message(
+                        chat_id,
+                        "❌ Qo‘shiq topilmadi.\nBoshqa nom bilan urinib ko‘ring."
+                    )
+                    continue
+
+                answer = "🎵 Topilgan qo‘shiqlar:\n\n"
+
+                for i, song in enumerate(results, 1):
+                    artist = song.get("artistName", "Noma'lum")
+                    name = song.get("trackName", "Noma'lum")
+                    link = song.get("trackViewUrl", "")
+
+                    answer += f"{i}. {artist} — {name}\n"
+                    answer += f"🔗 {link}\n\n"
+
+                send_message(chat_id, answer)
+
+        except Exception as e:
+            print("Xatolik:", e)
+            time.sleep(5)
+
+if __name__ == "__main__":
+    main()
